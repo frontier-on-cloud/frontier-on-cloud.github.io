@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiveKit agents-js#2615 on gemini-3.8-live: reproduction and patch check · Frontier</title>
+<meta name="description" content="agents-js 1.9.1 on gemini-3.8-live: the tool result is lost when the model speaks before calling the tool (0 of 2 delivered); with the patch proposed in the issue, delivered 5 of 5.">
+<meta property="og:title" content="LiveKit agents-js#2615 on gemini-3.8-live: reproduction and patch check">
+<meta property="og:description" content="Unpatched: tool result lost 2 of 2 when the model speaks first. Patched: delivered 5 of 5.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://frontieroncloud.com/tests/livekit-agents-js-2615-check/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/icon-256.png">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/icon-32.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="../../"><img src="../../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="../../#tests">Tests</a>
+      <a href="../../standard/">Standard</a>
+      <a href="../../discuss/">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<p class="crumbs"><a href="../../">Frontier</a> › <a href="../../#tests">Tests</a> › livekit-agents-js-2615-check</p>
+<h1>LiveKit agents-js#2615 on gemini-3.8-live: reproduction and patch check</h1>
+
+<dl class="facts">
+<dt>Model</dt><dd><code>gemini-3.8-live</code> (base model)</dd>
+<dt>Endpoint</dt><dd>Gemini API (Google AI Studio key). No LiveKit server.</dd>
+<dt>Framework</dt><dd><code>@livekit/agents</code> 1.9.1, <code>@livekit/agents-plugin-google</code> 1.9.1, <code>@livekit/rtc-node</code> 1.1.0, <code>@google/genai</code> 2.27.0 (plugin dependency), <code>zod</code> 3.25.76; Node v26.9.0, macOS</dd>
+<dt>Run</dt><dd>2026-10-02</dd>
+<dt>Runs</dt><dd>10: 3 + 3 with the "call first" prompt, 2 + 2 with "speak first", unpatched then patched</dd>
+<dt>Repository</dt><dd><a href="https://github.com/frontier-on-cloud/livekit-agents-js-2615-check">frontier-on-cloud/livekit-agents-js-2615-check</a> (MIT) at <a href="https://github.com/frontier-on-cloud/livekit-agents-js-2615-check/tree/1559574b7c4790ff72362b7d41a55c016c378537"><code>1559574</code></a></dd>
+<dt>Issue checked</dt><dd><a href="https://github.com/livekit/agents-js/issues/2615">livekit/agents-js#2615</a></dd>
+</dl>
+
+<h2 id="question">Question</h2>
+<p>Issue #2615 reports that in the agents-js Google plugin, with <code>toolBehavior</code> unset, a content-free <code>generationComplete</code> after a <code>toolCall</code> interrupts the tool's own turn, and the tool result and <code>FunctionToolsExecuted</code> are lost. Does that happen on the base model <code>gemini-3.8-live</code>, and does the patch to <code>isNewGeneration()</code> proposed in the issue fix it?</p>
+
+<h2 id="setup">Setup</h2>
+<ul>
+<li><code>AgentSession.start({ agent })</code> with no room and no job context. Input: <code>FileAudioInput</code>, 20 ms PCM16 frames paced in real time: 1 s of silence, then "Book me the 3pm slot tomorrow, please." (16 kHz mono, synthetic speech, 2.69 s), then silence. Gemini's default server-side voice detection handles turn-taking. Output: <code>SimAudioOutput</code>, a simulated real-time playout with the same contract as <code>ParticipantAudioOutput</code>.</li>
+<li><code>google.beta.realtime.RealtimeModel({ model: 'gemini-3.8-live', connOptions: { maxRetry: 0 } })</code>, with <code>toolBehavior</code> and <code>toolResponseScheduling</code> unset.</li>
+<li>One tool, <code>book_slot(slot)</code>: waits 3 s and ignores the abort signal, like a real side effect.</li>
+<li>Two prompts: "call first", and "speak first", which asks the model to say one short sentence and then call the tool in the same turn.</li>
+<li>Evidence: one JSONL per run with agents-js and plugin debug logs, harness marks, and a wrapper on <code>Session.prototype.sendToolResponse</code> of <code>@google/genai</code>, so "function response sent" is checked where the SDK sends it.</li>
+</ul>
+
+<h2 id="results">Results</h2>
+<div class="table-wrap">
+<table class="wide">
+<thead><tr><th>Prompt</th><th>Plugin</th><th class="n">Runs</th><th>Phantom generation after <code>toolCall</code></th><th>Owning speech interrupted</th><th><code>FunctionToolsExecuted</code></th><th>Function response sent</th><th>Line spoken before the call</th></tr></thead>
+<tbody>
+<tr><td>call first</td><td>1.9.1</td><td class="n">3</td><td>3/3, +3 to +4 ms</td><td>3/3 (not aborted)</td><td>3/3</td><td>3/3</td><td>none</td></tr>
+<tr><td>call first</td><td>patched</td><td class="n">3</td><td>0/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>none</td></tr>
+<tr><td>speak first</td><td>1.9.1</td><td class="n">2</td><td>2/2, +2 to +7 ms</td><td>2/2 (aborted +2, +8 ms)</td><td><strong>0/2</strong></td><td><strong>0/2</strong></td><td>cut after 442 and 643 ms</td></tr>
+<tr><td>speak first</td><td>patched</td><td class="n">2</td><td>0/2</td><td>0/2</td><td>2/2</td><td>2/2</td><td>played in full</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><strong>Unpatched,</strong> agents-js 1.9.1 opened a phantom agent-initiated generation 2 to 7 ms after every <code>toolCall</code> (5 of 5). The trigger is the content-free <code>generationComplete</code> that follows the call. The phantom's <code>input_speech_started</code> interrupts the speech that owns the call.</li>
+<li><strong>Call first (3 runs).</strong> The owning speech had already finished its generation tasks and was waiting on the tool. It was marked interrupted, but the code after the tool does not check that flag again, so <code>FunctionToolsExecuted</code> was emitted and the function response was sent: delivered 3 of 3.</li>
+<li><strong>Speak first (2 runs, the issue's case).</strong> The owning speech was still playing out, so it took the interrupted branch. The spoken line was cut after 0.4 to 0.6 s, <code>execute()</code> still completed 3 s later, <code>FunctionToolsExecuted</code> was never emitted, no function response was sent, and the model stayed silent until the session closed 12 s later: delivered 0 of 2.</li>
+<li><strong>Patched:</strong> no phantom generation and no <code>input_speech_started</code> after the call (0 of 5), the result delivered 5 of 5, the line spoken before the call played in full, and the model spoke the post-tool confirmation.</li>
+</ul>
+<p>On the base model the drop is a race: any audio before the call loses it. The result is dropped in one place, in <code>agent_activity.ts</code> (<code>_realtimeGenerationTaskImpl</code>): the <code>if (speechHandle.interrupted)</code> check right after <code>waitIfNotInterrupted</code>.</p>
+
+<h2 id="caveats">Caveats</h2>
+<ul>
+<li>Small N: 3 + 3 runs with "call first", 2 + 2 with "speak first".</li>
+<li>The speak-first variant is an addition. The issue's own steps do not ask the model to speak first.</li>
+<li>Simulated audio output, no WebRTC track.</li>
+<li>Not tested: <code>gemini-3.8-live-extended-thinking</code>, NON_BLOCKING and PR #2594, a fast-failing tool, Vertex AI.</li>
+<li>Each run also opens a short setup-only websocket (about 0.3 s, no audio) when the session is created: 21 connections for 11 run attempts. One attempt stopped at startup and is kept as <code>runs/aborted-0.jsonl</code>.</li>
+<li>The absolute path of the WAV file in the logs was rewritten to <code>assets/book.wav</code> for publication. Nothing else in the logs was changed.</li>
+<li>No clip for this check.</li>
+</ul>
+
+<h2 id="source">Source and reproduce</h2>
+<p>Everything is in one commit, <a href="https://github.com/frontier-on-cloud/livekit-agents-js-2615-check/tree/1559574b7c4790ff72362b7d41a55c016c378537"><code>1559574</code></a> (2026-10-02): the harness <code>app/run.mjs</code>, the runs in <code>app/runs/</code>, the analysis <code>app/analyze.py</code>, and the patch as <code>patches/dist.diff</code> and <code>patches/src.diff</code>. The unmodified plugin files kept under <code>patches/orig/</code> are LiveKit's, Apache-2.0, not covered by the repository's MIT license.</p>
+<p>This check takes more than three commands: it runs the published plugin, patches it, then runs it again.</p>
+<pre><code>cd app
+npm ci
+cp ../.env.example .env            # put GEMINI_API_KEY=... in it
+LK_GOOGLE_DEBUG=1 node --env-file=.env run.mjs baseline-1 &gt; runs/baseline-1.jsonl
+VARIANT=speak_first LK_GOOGLE_DEBUG=1 node --env-file=.env run.mjs baseline-speakfirst-1 &gt; runs/baseline-speakfirst-1.jsonl
+python3 ../patches/apply_dist_patch.py .      # exact-text edit of dist/realtime/realtime_api.js and .cjs
+LK_GOOGLE_DEBUG=1 node --env-file=.env run.mjs patched-1 &gt; runs/patched-1.jsonl
+VARIANT=speak_first LK_GOOGLE_DEBUG=1 node --env-file=.env run.mjs patched-speakfirst-1 &gt; runs/patched-speakfirst-1.jsonl
+python3 analyze.py runs/*.jsonl</code></pre>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frontier: measured tests of cloud AI products</title>
+<meta name="description" content="Communities, one per cloud, that publish measured and reproducible tests of cloud AI products. Every number comes from a public repository at a named commit.">
+<meta property="og:title" content="Frontier: measured tests of cloud AI products">
+<meta property="og:description" content="Every number comes from a public repository at a named commit, with the raw data next to the summary.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://frontieroncloud.com/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/icon-256.png">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="./" aria-current="page"><img src="assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="#tests">Tests</a>
+      <a href="standard/">Standard</a>
+      <a href="discuss/">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<h1>Measured tests of cloud AI products</h1>
+
+<p>Frontier is a set of communities, one per cloud, that test cloud AI products at the frontier and publish the measurements. Every number on this site comes from a public repository at a named commit, with the raw data committed next to the summary. Each README has a Reproduce section that reruns the test in three commands: copy the example environment file, install, run. Where a setup needs more than that, the test page says so. The rules are on the <a href="standard/">Standard</a> page.</p>
+
+<h2 id="communities">Communities</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Cloud</th><th>Community</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Google Cloud</td><td><a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a></td><td>Active. All four tests below.</td></tr>
+<tr><td>AWS</td><td>r/FrontierOnAWS</td><td>Coming</td></tr>
+<tr><td>Azure</td><td>r/FrontierOnAzure</td><td>Coming</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="tests">Tests</h2>
+<p class="muted">Newest first. Each page has the setup, the exact numbers, the caveats and the commit the numbers come from.</p>
+
+<ol class="topics">
+<li>
+<a class="t" href="tests/gemini-live-resume-test/">A pending tool call across a lost connection and session resumption</a>
+<span class="meta">Google Cloud · Gemini Live API, <code>gemini-3.8-live</code> · 2026-10-02 to 2026-10-03 · 43 sessions · <a href="https://github.com/frontier-on-cloud/gemini-live-resume-test">repo</a></span>
+<p>Measured: what happens to a pending booking when the Live API WebSocket is lost, and what session resumption recovers. Result: after a silent loss every resume was refused with close code <code>1011</code> while the server held the old connection (450 of 450 attempts over 15 minutes with real packet loss); a client-side fallback to a new session answered correctly in 9 of 9 runs.</p>
+</li>
+<li>
+<a class="t" href="tests/livekit-agents-js-2615-check/">LiveKit agents-js#2615 on gemini-3.8-live: reproduction and patch check</a>
+<span class="meta">Google Cloud · Gemini Live API through LiveKit agents-js 1.9.1 · 2026-10-02 · 10 runs · <a href="https://github.com/frontier-on-cloud/livekit-agents-js-2615-check">repo</a></span>
+<p>Measured: whether a tool result is lost after a content-free <code>generationComplete</code>, as the issue reports, and whether the patch proposed in the issue fixes it. Result: unpatched, the result was lost in 2 of 2 runs where the model spoke before calling the tool and delivered in 3 of 3 where it called first; patched, delivered in 5 of 5.</p>
+</li>
+<li>
+<a class="t" href="tests/gemini-live-commit-guard/">A client-side commit guard for in-flight tool calls, before and after</a>
+<span class="meta">Google Cloud · Gemini Live API, <code>gemini-3.8-live</code> · 2026-10-01 · 36 sessions · <a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard">repo</a></span>
+<p>Measured: a reference guard (hold the commit on speech onset, dedupe by business key, send the model a status note, handle abandoned BLOCKING calls) on the stop test's speech scenarios. Result: a booking committed after the user's stop in 12 of 12 runs with the guard off and in 0 of 12 with it on.</p>
+</li>
+<li>
+<a class="t" href="tests/gemini-live-stop-test/">What "stop" does to an in-flight tool call on Gemini 3.8 Live</a>
+<span class="meta">Google Cloud · Gemini Live API, <code>gemini-3.8-live</code> · 2026-09-29 to 2026-09-30 · 41 sessions · <a href="https://github.com/frontier-on-cloud/gemini-live-stop-test">repo</a></span>
+<p>Measured: whether the Live API cancels a pending <code>book_slot</code> call when the user says "stop", with text and speech input. Result: no <code>toolCallCancellation</code> in any of the 41 sessions; with <code>behavior: BLOCKING</code> the model re-issued the call and the slot was booked twice in 3 of 3 text runs.</p>
+</li>
+</ol>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discuss · Frontier</title>
+<meta name="description" content="Where to discuss Frontier tests today: r/FrontierOnGCP and the issues of each test repository.">
+<meta property="og:title" content="Discuss · Frontier">
+<meta property="og:description" content="Where to discuss Frontier tests today: r/FrontierOnGCP and the issues of each test repository.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://frontieroncloud.com/discuss/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/icon-256.png">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/icon-32.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="../"><img src="../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="../#tests">Tests</a>
+      <a href="../standard/">Standard</a>
+      <a href="./" aria-current="page">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<h1>Discuss</h1>
+<p>A forum will open on this site. Until then, two places.</p>
+
+<h2 id="subreddit">The subreddit</h2>
+<p><a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a> carries the posts of the Google Cloud tests; each test page links its own. Use it for questions, reruns on your own setup, and counterexamples. r/FrontierOnAWS and r/FrontierOnAzure are coming.</p>
+
+<h2 id="issues">Issues in each repository</h2>
+<p>For a bug in a harness, a number that does not match its data, or a rerun that gives different results, open an issue in the test's repository:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Test</th><th>Issues</th></tr></thead>
+<tbody>
+<tr><td><a href="../tests/gemini-live-resume-test/">A pending tool call across a lost connection</a></td><td><a href="https://github.com/frontier-on-cloud/gemini-live-resume-test/issues">gemini-live-resume-test</a></td></tr>
+<tr><td><a href="../tests/livekit-agents-js-2615-check/">LiveKit agents-js#2615 check</a></td><td><a href="https://github.com/frontier-on-cloud/livekit-agents-js-2615-check/issues">livekit-agents-js-2615-check</a></td></tr>
+<tr><td><a href="../tests/gemini-live-commit-guard/">A client-side commit guard</a></td><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/issues">gemini-live-commit-guard</a></td></tr>
+<tr><td><a href="../tests/gemini-live-stop-test/">What "stop" does to an in-flight tool call</a></td><td><a href="https://github.com/frontier-on-cloud/gemini-live-stop-test/issues">gemini-live-stop-test</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="useful">What makes a useful reply</h2>
+<ul>
+<li>A rerun with your numbers, and the commit, date, endpoint and N you used.</li>
+<li>A setup the test did not cover: Vertex AI, another region, real voices and microphones, a real backend.</li>
+<li>A counterexample with its timeline, even a single run.</li>
+</ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>

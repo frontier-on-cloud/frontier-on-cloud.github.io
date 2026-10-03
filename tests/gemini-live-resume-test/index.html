@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A pending tool call across a lost connection and session resumption · Frontier</title>
+<meta name="description" content="43 Live API sessions on gemini-3.8-live: after a silent connection loss every resume was refused with 1011 while the server held the old connection; a client-side fallback answered correctly in 9 of 9 runs.">
+<meta property="og:title" content="A pending tool call across a lost connection and session resumption">
+<meta property="og:description" content="43 sessions: after a silent loss, 450 of 450 resume attempts refused over 15 minutes; a client-side fallback answered correctly in 9 of 9 runs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://frontieroncloud.com/tests/gemini-live-resume-test/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/posters/lockout-recovery-v2.webp">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/icon-32.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="../../"><img src="../../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="../../#tests">Tests</a>
+      <a href="../../standard/">Standard</a>
+      <a href="../../discuss/">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<p class="crumbs"><a href="../../">Frontier</a> › <a href="../../#tests">Tests</a> › gemini-live-resume-test</p>
+<h1>A pending tool call across a lost connection and session resumption</h1>
+
+<dl class="facts">
+<dt>Model</dt><dd><code>gemini-3.8-live</code></dd>
+<dt>Endpoint</dt><dd>Gemini Developer API with an API key. Not Vertex AI.</dd>
+<dt>SDK</dt><dd><code>google-genai</code> 2.25.0 with <code>websockets</code> 16.1.1, Python 3.13</dd>
+<dt>Runs</dt><dd>2026-10-02 evening and 2026-10-03 morning</dd>
+<dt>Sessions</dt><dd>43 in four rounds, 1 to 4 runs per scenario, plus 2 runs of the one-file reproduction</dd>
+<dt>Repository</dt><dd><a href="https://github.com/frontier-on-cloud/gemini-live-resume-test">frontier-on-cloud/gemini-live-resume-test</a> (MIT), numbers at <a href="https://github.com/frontier-on-cloud/gemini-live-resume-test/tree/687b1af2b222a50d364f8a5fc64427e540c01d08"><code>687b1af</code></a></dd>
+<dt>Report to Google</dt><dd><a href="https://github.com/google-gemini/gemini-live-api-examples/issues/60">google-gemini/gemini-live-api-examples#60</a>, opened 2026-10-03 with the one-file reproduction</dd>
+<dt>Reddit</dt><dd><a href="https://www.reddit.com/r/FrontierOnGCP/s/TEcSVmgEjQ">Series 2 post with the clip</a> (2026-10-03)</dd>
+</dl>
+
+<h2 id="question">Question</h2>
+<p>A voice session's WebSocket connection is lost while a side-effecting tool call is pending. Can the client resume the session with its resumption handle and deliver the result, and does the user hear the truth about the booking? None of the Gemini API or Google Cloud pages read on 2026-10-02 says what happens to a tool call pending at a disconnect, how soon a resume can succeed, or which errors a resume can return.</p>
+
+<h2 id="setup">Setup</h2>
+<ul>
+<li>The user says "Book me the 3pm slot tomorrow, please.", the model calls <code>book_slot</code>, and a fake backend takes 4 s (7 s in some scenarios) to commit. The connection is lost before the result reaches the model. The client tries to resume with its handle, sends the result, and asks "Did you book it?". The answer is compared with what the backend actually did.</li>
+<li>Speech input: macOS <code>say</code>, voice Samantha, 16 kHz PCM, 100 ms chunks in real time.</li>
+<li>The client detects a loss with its own WebSocket pings, one every 0.5 s, and declares the connection lost after 2 s without a frame or a pong.</li>
+</ul>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Round</th><th>How the connection is lost</th><th class="n">Sessions</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>The client aborts its own TCP connection, so the server sees it close</td><td class="n">17</td></tr>
+<tr><td>2</td><td>An application-level freeze: a local proxy stops forwarding bytes and closes nothing</td><td class="n">9</td></tr>
+<tr><td>3</td><td>Real packet loss: iptables drops the flow both ways in a Linux container, nothing is closed</td><td class="n">6</td></tr>
+<tr><td>stage 2</td><td>Round 3's packet loss, with a client-side recovery (<code>recovery.py</code>)</td><td class="n">11</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="results">Results</h2>
+
+<h3>1. A pending tool call survives a resume that works</h3>
+<p>In all 14 runs that had a pending call and a successful resume, the resumed session accepted the <code>FunctionResponse</code> for the call id issued before the drop. The server never re-issued the call, never sent <code>toolCallCancellation</code>, and returned no error. There was exactly one booking per run. The call stayed answerable for as long as the session could be resumed: 154 s after it was issued in round 2, 83.6 s in round 3.</p>
+<p>If the client does not send that response after the resume, the model stays at "in progress". In 3 of 3 such runs it answered "Did you book it?" with an in-progress sentence ("I'm booking the 3 pm slot for you now." in run 1), 2.9 to 3.1 s after the booking had committed.</p>
+
+<h3>2. The immediate resume after an idle drop is refused, and works about 1.5 s later</h3>
+<p>Round 1, where the client aborts the connection and the server sees the close:</p>
+<ul>
+<li>with the model idle at the drop, a resume sent at once was closed with <code>1011 Internal error encountered.</code> in 12 of 12 runs, 472 to 704 ms after it started;</li>
+<li>a resume about 1.5 s after the drop worked in 12 of 12 (a retry 1 s after the refusal in 11 runs, a single attempt at 1.6 s in 1);</li>
+<li>a clean WebSocket close instead of an abort changed nothing (1 of 1);</li>
+<li>when the model was speaking at the drop, the immediate attempt worked (3 of 3).</li>
+</ul>
+<p>From the drop to the resumed <code>setupComplete</code>: 2.0 to 2.3 s after an idle drop (n=12), 0.5 to 0.6 s after a drop during speech (n=3). Each connection received exactly one <code>sessionResumptionUpdate</code>, right after <code>setupComplete</code>, and none later.</p>
+
+<h3>3. After a silent loss, every resume is refused while the server holds the old connection</h3>
+<p>A silent loss is what a phone sees when it drops off Wi-Fi: packets stop, and no close frame, FIN or RST reaches the server. The client detected it 1.5 to 2.0 s after the loss.</p>
+<ul>
+<li><strong>Application-level freeze (round 2).</strong> 40 of 40 resume attempts, from 1.8 s to 133 s after the loss, were refused with the same <code>1011</code>. In a long probe (N=1) nothing worked for 12.8 minutes; the server closed the frozen connection with <code>1011</code> after about 8 minutes, and the handle did not work after that either.</li>
+<li><strong>Real packet loss (round 3).</strong> 450 of 450 attempts, made at detection and then every 10 s, were refused with <code>1011</code> for the whole 15 minutes tried (last attempt at +892 s), in 5 of 5 runs. None hung. With the model idle, the server sent nothing at all for 479 s: no WebSocket ping, no TCP keepalive. With unacknowledged data in flight, its TCP gave up retransmitting after about 2 minutes, and the session stayed locked anyway.</li>
+<li><strong>Closing the old connection unlocks it at once.</strong> Once the path came back and the client closed the old connection (close 1000, echoed by the server), the next resume worked 0.5 to 0.6 s later (6 of 6 across rounds 2 and 3). The path coming back was not enough (N=1): with the old connection open again and carrying traffic, attempts were still refused until the client closed it.</li>
+</ul>
+<p>In every silent-loss run the booking committed 1 to 3 s after the loss. In the runs where the old path never came back, the user was never told.</p>
+
+<h3>4. Client-side recovery (stage 2)</h3>
+<p><code>recovery.py</code> is a reference pattern for that case. On a detected loss it tries to resume for 4 s (an attempt at detection, then one per second) and sends a close on the old socket in parallel. If no resume is accepted, it opens a new session without a handle and restores the conversation with one <code>send_client_content</code>: the last turns of the client's own transcript, plus a "System note" with one status line per side effect, taken from the backend, not from the model. The old call id is never answered. A call the model issues again is deduplicated by business key and answered from the existing job.</p>
+<ul>
+<li>9 of 9 recovered runs answered "Did you book it?" correctly, with one booking each. The resume window never helped here: 36 of 36 attempts were refused.</li>
+<li>With the status note, the model's first sentence already said the booking was made ("Of course, your 3:00 p.m. slot for tomorrow has been successfully booked.") and it never re-issued the call (0 of 7). Without it (N=2), the model re-issued <code>book_slot</code> in 2 of 2 runs; the dedupe kept that from becoming a second booking, but its first sentence still announced a booking in progress ("I'm booking the 3:00 p.m. slot tomorrow for you.").</li>
+<li>From the loss to the first audio of the recovered session: 6.1 to 7.1 s. That is detection 1.5 to 2.0 s, the resume window 3.55 to 3.6 s (the largest share), the new session's setup 0.25 to 0.32 s, and the first audio 0.76 to 1.2 s after the restore.</li>
+<li>A plain resume loop without the fallback (one attempt per second for 60 s, N=2) got 118 refusals out of 118 and never told the user.</li>
+<li>The close sent on the old socket at detection never left the client: on a dead path it costs nothing and does nothing.</li>
+</ul>
+
+<figure>
+<img src="../../assets/figures/lockout.webp" width="1600" height="900" loading="lazy" alt="Two panels on a time axis since the loss. Without recovery: five runs with real packet loss, every resume refused with 1011 up to 15 minutes, the booking committed within seconds, the user never told. With recovery: four runs, loss detected, four resumes refused in a 4 s window, a new session, first model audio 6.1 to 7.1 s after the loss, and the model says the slot is booked.">
+<figcaption>The lockout (B1, B2) and the recovery (BR1). From <code>results/figures/lockout.png</code>, drawn by <code>make_figure.py</code> from the JSONL.</figcaption>
+</figure>
+
+<h3>Other findings</h3>
+<ul>
+<li>Transparent mode and <code>lastConsumedClientMessageIndex</code> are not available on the Gemini Developer API: the SDK refuses <code>transparent</code> in this mode, and the server closes the setup with <code>1007</code> when it is sent anyway.</li>
+<li>No <code>goAway</code> arrived in any session, including a frozen connection held for 12.8 minutes, which the server ended with a <code>1011</code> close instead.</li>
+<li>The handle issued before the user spoke still restored everything up to the drop.</li>
+</ul>
+
+<h3>The clip</h3>
+<figure>
+<video controls preload="none" playsinline width="1280" height="720" poster="../../assets/posters/lockout-recovery-v2.webp">
+<source src="../../assets/clips/lockout-recovery-v2.mp4" type="video/mp4">
+<a href="../../assets/clips/lockout-recovery-v2.mp4">Download the clip (MP4)</a>
+</video>
+<figcaption>MP4, 52.5 s, 1.6 MB. Two sessions recorded on 2026-10-03 for the clip in the round 3 container, not part of the 43. The user's lines are spoken by <code>af_heart</code>, a voice of the open-weight Kokoro-82M text-to-speech model, sent as real input. Without recovery (B1 timing, the resume loop stopped 60 s after the loss): 6 of 6 resumes refused with <code>1011</code>, one booking, the model silent after its tool call. Shown in real time to 9.3 s, then compressed ×4, marked on screen. With recovery (BR1 timing): 4 refusals, a new session 3.75 s after detection, first model audio 6.57 s after the loss, one booking, no re-issued call, a correct answer. From <code>results/clip/lockout-recovery-v2.mp4</code>, drawn by <code>make_clip.py</code>.</figcaption>
+</figure>
+
+<h3>One-file reproduction</h3>
+<p><code>repro_resume_lockout.py</code> (179 lines, <code>google-genai</code> 2.25.0 and <code>python-dotenv</code> only) shows finding 3 on a laptop, without Docker or root. It embeds a small HTTP CONNECT proxy that can freeze its tunnel, routes only the first connection through it, freezes the tunnel after one text turn, and tries to resume every 5 s. As a control it then unfreezes the tunnel, closes the first connection cleanly, waits 2 s, and tries once more. Two runs on 2026-10-03, macOS: 12 of 12 attempts refused with <code>1011</code> while frozen in each run (+5 to +60 s, 510 to 676 ms and 497 to 665 ms per refusal); after the clean close, resume <code>setupComplete</code> after 582 ms and 543 ms. This is the reproduction in the report to Google.</p>
+
+<h2 id="client">What a client must do</h2>
+<p>These follow from the measurements. They are not guarantees from the API.</p>
+<ol>
+<li>Keep your own ledger of tool calls by call id, across connections. After a resume, send the result for the old id, even if the side effect finished during the gap.</li>
+<li>Retry a refused resume. A <code>1011</code> right after an idle drop is not a dead handle: wait about 1.5 s or retry after 1 s. Keep the handle you have; only one arrives per connection, and it restores the latest state.</li>
+<li>Detect the loss yourself with WebSocket pings. An idle healthy connection carries no server frames for many seconds, and the server never pinged the client.</li>
+<li>Get a close to the server when you can. If the path comes back, close the old connection before resuming; that is what unlocks the session.</li>
+<li>Put a short cut-off on resuming and fall back to a new session. After a silent loss on a path that does not come back, the session stayed locked for the full 15 minutes tried.</li>
+<li>In the new session, restore the status of each side effect from your backend, not only the transcript. Without it the model re-issued the call and announced a booking that was already done.</li>
+<li>Deduplicate side effects by business key, in the new session too. A re-issued call has a new id, and only the business key ties it to the old one.</li>
+<li>Do not count on transparent mode or <code>lastConsumedClientMessageIndex</code> on the Gemini Developer API. Buffer anything you need to replay yourself.</li>
+<li>Do not wait for <code>goAway</code>.</li>
+<li>Expect speech cut by a drop to be partly repeated after a resume.</li>
+</ol>
+
+<h2 id="caveats">Caveats</h2>
+<ul>
+<li>Small N: 1 to 4 runs per scenario. One network path, one model, the Gemini Developer API only (not Vertex AI), two days.</li>
+<li>Synthetic speech (macOS <code>say</code>, one voice, digital silence between utterances; the clip sessions use Kokoro <code>af_heart</code>) and a fake in-process booking backend.</li>
+<li>Round 2's freeze is application-level: the proxy's kernel still acknowledges and answers TCP probes. Round 3 removes that caveat with real packet loss, but through Colima's vzNAT and three packet-level NATs, on one home connection.</li>
+<li>In round 3 the client drops its own outgoing packets with iptables, so its socket runs the probe timer instead of the retransmission timer. The server side sees a dead peer either way.</li>
+<li>The server's 53-byte segment at +479 s is read as a close frame from its size and timing, which match the close decoded in round 2. TLS was not decrypted.</li>
+<li>Stage 2 used one wording of the status note. The commit always landed inside the resume window, so the "still being processed" path was tested offline only. In 9 of 9 runs the question came before the restore reply had finished playing; a client that drops queued audio on <code>interrupted</code> would have cut part of that reply. The gap uses a playback model (24 kHz, back to back from arrival), not real audio output.</li>
+<li>Not tested: replaying speech spoken during the gap, a second loss after a fallback, opening the new session in parallel with the resume attempts, a path that comes back after the server's own close, how many lost sessions the server holds at once, long sessions with <code>goAway</code>, a real device switching networks.</li>
+</ul>
+
+<h2 id="source">Source and reproduce</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Commit</th><th>Date</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-resume-test/tree/687b1af2b222a50d364f8a5fc64427e540c01d08"><code>687b1af</code></a></td><td>2026-10-03</td><td>The harness, the 43 sessions, <code>FINDINGS.md</code>, the one-file reproduction</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-resume-test/tree/a2bc678405b9dd4c5c857bf23600af49aeb5940c"><code>a2bc678</code></a></td><td>2026-10-03</td><td>The lockout figure, the first clip (macOS voice), one recorded recovery session</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-resume-test/tree/85a9bf8a89a7dcf56df94424cde4a98ca0beb75f"><code>85a9bf8</code></a></td><td>2026-10-03</td><td>The clip re-recorded with the <code>af_heart</code> user voice (the clip above)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The detailed record, with the method, every table, verbatim transcripts and the limits of each round, is <a href="https://github.com/frontier-on-cloud/gemini-live-resume-test/blob/687b1af2b222a50d364f8a5fc64427e540c01d08/FINDINGS.md"><code>FINDINGS.md</code></a>. <code>results/summary.md</code> is generated from the JSONL by <code>make_summary.py</code>. No resumption handle is stored anywhere in the results.</p>
+<pre><code>cp .env.example .env    # then set GEMINI_API_KEY in .env
+uv run repro_resume_lockout.py --seconds 60
+uv run resume_test.py --scenario R1 -n 3 --results-dir out/r1</code></pre>
+<p>The first two commands rerun the lockout on a laptop. The third reruns one round 1 scenario; the README lists the commands for every round. Rounds 3 and stage 2 need more than three commands: a Linux container with <code>NET_ADMIN</code>, under Colima started with <code>--network-address --network-preferred-route</code>, and each B1 and B2 run lasts 15 minutes. Offline checks, no key: <code>uv run test_freeze_proxy.py; uv run test_recovery.py</code>.</p>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>

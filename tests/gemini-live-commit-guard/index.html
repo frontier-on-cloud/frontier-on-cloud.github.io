@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A client-side commit guard for in-flight tool calls, before and after · Frontier</title>
+<meta name="description" content="36 Live API sessions on gemini-3.8-live with speech input: unwanted commits after a stop 12 of 12 without the guard, 0 of 12 with it.">
+<meta property="og:title" content="A client-side commit guard for in-flight tool calls, before and after">
+<meta property="og:description" content="36 sessions with speech input: unwanted commits after a stop 12 of 12 without the guard, 0 of 12 with it.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://frontieroncloud.com/tests/gemini-live-commit-guard/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/posters/before-after.webp">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/icon-32.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="../../"><img src="../../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="../../#tests">Tests</a>
+      <a href="../../standard/">Standard</a>
+      <a href="../../discuss/">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<p class="crumbs"><a href="../../">Frontier</a> › <a href="../../#tests">Tests</a> › gemini-live-commit-guard</p>
+<h1>A client-side commit guard for in-flight tool calls, before and after</h1>
+
+<dl class="facts">
+<dt>Model</dt><dd><code>gemini-3.8-live</code></dd>
+<dt>Endpoint</dt><dd>Gemini API (Google AI Studio, API key). Not Vertex AI.</dd>
+<dt>SDK</dt><dd><code>google-genai</code> 2.25.0, Python 3.13.7</dd>
+<dt>Runs</dt><dd>2026-10-01, 08:35 to 08:45 CEST, ablations 08:52 to 08:56 CEST</dd>
+<dt>Sessions</dt><dd>36, speech input: 24 with the guard off and on (4 scenarios, N=3 each), 12 ablations</dd>
+<dt>Repository</dt><dd><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard">frontier-on-cloud/gemini-live-commit-guard</a> (MIT), numbers at <a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/20330de703be426725fe7457702f319581a15f89"><code>20330de</code></a></dd>
+<dt>Follows</dt><dd><a href="../gemini-live-stop-test/">What "stop" does to an in-flight tool call</a></dd>
+<dt>Reddit</dt><dd><a href="https://www.reddit.com/r/FrontierOnGCP/s/20k2lHxLN3">Part 3, the commit guard and the before/after clip</a> (2026-10-02)</dd>
+</dl>
+
+<h2 id="question">Question</h2>
+<p>The stop test found that on <code>gemini-3.8-live</code> the client never receives <code>toolCallCancellation</code>, that in the default NON_BLOCKING mode a later "stop" interrupts nothing, that in BLOCKING mode the server drops the pending call and the model may re-issue it with a new id, and that the model's account of the booking can contradict the backend. Can the client handle all of this itself, and which parts of the handling matter?</p>
+
+<h2 id="setup">Setup</h2>
+<ul>
+<li>Same system prompt, speech clips, service latency and stop timing as the stop test's speech runs. The clips are macOS <code>say</code>, voice Samantha, 16 kHz 16-bit mono PCM, streamed in 100 ms chunks in real time, with server voice activity detection at its defaults.</li>
+<li>The fake service has two phases: <code>prepare()</code> does the slow, reversible part (4 s, 7 s in G2), <code>commit()</code> is the instant, irreversible side effect, <code>cancel()</code> releases a job that was not committed.</li>
+<li><code>commit_guard.py</code> (one file, about 640 lines) wraps the app's own tool handling. Its four behaviors can be switched off one by one. With the guard off, the job is prepared and committed at once, which is the stop-test baseline.</li>
+</ul>
+<ol>
+<li><strong>Hold on speech onset.</strong> After <code>prepare()</code>, a grace window of 1.5 s. If the user starts speaking (<code>ACTIVITY_START</code>) while a job is pending, the commit is held until that utterance's input transcript arrives, and a keyword check decides: stop, cancel, don't, do not, wait, never mind, hold on. The utterance that triggered the call is checked too. With no transcript 3 s after the later of the speech onset and the moment the commit became due, the job is cancelled.</li>
+<li><strong>Deduplicate by business key.</strong> The key is the tool name plus the canonical arguments (the slot reduced to day plus 24 h time, <code>tomorrow 15:00</code>). A call whose key matches a job from the last 30 s is not executed; it is answered with that job's result.</li>
+<li><strong>Status note.</strong> After a cancel decision, or a commit that happened despite a stop, the guard sends the model a user turn with <code>send_client_content(..., turn_complete=True)</code>, for example "System note: the booking for tomorrow 3pm was cancelled before it was committed. Nothing is scheduled." The <code>FunctionResponse</code> still carries the real status.</li>
+<li><strong>Abandoned BLOCKING calls.</strong> If <code>interrupted</code> arrives while a BLOCKING call has no response yet, the guard marks the call abandoned, holds the commit and does not answer the dead id. A re-issued call for the same key gets the existing job's status on its live id.</li>
+</ol>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Scenario</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>Default (NON_BLOCKING); stop clip 1.0 s after the call; 4 s prepare</td></tr>
+<tr><td>C</td><td>BLOCKING; stop clip 1.0 s after the call; 4 s prepare</td></tr>
+<tr><td>G2</td><td>Follow-up question 0.5 s after the call, so the model speaks while the call is pending; stop clip 1 s into that speech; 7 s prepare</td></tr>
+<tr><td>F</td><td>Stop clip 0.3 s after the end of the booking clip; 4 s prepare</td></tr>
+</tbody>
+</table>
+</div>
+<p><em>Unwanted commit</em>: a booking committed after the stop clip had started. <em>Statement consistent</em>: the model's turns after the stop clip, classified from the transcript as "claims booked", "claims not booked" or neither, compared with the fake service; neither counts as inconsistent. The last claim and the first claim are scored separately. The rules were checked by hand on 51 post-stop statements.</p>
+
+<h2 id="results">Results</h2>
+<p>Counts are runs out of sessions. "Off, stop test" rescores the stop test's speech sessions (no guard, same prompt, clips, latency and timing) with the same metric code; for C it includes the stop test's re-run.</p>
+<div class="table-wrap">
+<table class="wide">
+<thead><tr><th>Scenario</th><th>Guard</th><th class="n">Sessions</th><th>Unwanted commit</th><th>Double booking</th><th>Statement consistent (last claim)</th><th>First claim consistent</th><th>Stop to decision, ms (median, range)</th><th>Note cut a started reply</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>off, stop test</td><td class="n">3</td><td>3/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>-</td><td>-</td></tr>
+<tr><td>A</td><td>off</td><td class="n">3</td><td>3/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>-</td><td>-</td></tr>
+<tr><td>A</td><td><strong>on</strong></td><td class="n">3</td><td><strong>0/3</strong></td><td>0/3</td><td>3/3</td><td>3/3</td><td>3481 (3479 to 3503)</td><td>1/3</td></tr>
+<tr><td>C</td><td>off, stop test</td><td class="n">6</td><td>6/6</td><td>2/6</td><td>2/6</td><td>2/6</td><td>-</td><td>-</td></tr>
+<tr><td>C</td><td>off</td><td class="n">3</td><td>3/3</td><td>2/3</td><td>2/3</td><td>2/3</td><td>-</td><td>-</td></tr>
+<tr><td>C</td><td><strong>on</strong></td><td class="n">3</td><td><strong>0/3</strong></td><td><strong>0/3</strong></td><td><strong>3/3</strong></td><td><strong>3/3</strong></td><td>3477 (3473 to 3507)</td><td>1/3</td></tr>
+<tr><td>G2</td><td>off, stop test</td><td class="n">3</td><td>3/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>-</td><td>-</td></tr>
+<tr><td>G2</td><td>off</td><td class="n">3</td><td>3/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>-</td><td>-</td></tr>
+<tr><td>G2</td><td><strong>on</strong></td><td class="n">3</td><td><strong>0/3</strong></td><td>0/3</td><td>3/3</td><td>3/3</td><td>3466 (3463 to 3466)</td><td>1/3</td></tr>
+<tr><td>F</td><td>off, stop test</td><td class="n">3</td><td>3/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>-</td><td>-</td></tr>
+<tr><td>F</td><td>off</td><td class="n">3</td><td>3/3</td><td>0/3</td><td>3/3</td><td>3/3</td><td>-</td><td>-</td></tr>
+<tr><td>F</td><td><strong>on</strong></td><td class="n">3</td><td><strong>0/3</strong></td><td>0/3</td><td>3/3</td><td>3/3</td><td>3494 (3469 to 3827)</td><td>0/3</td></tr>
+</tbody>
+</table>
+</div>
+<p>With the guard off the model usually said "already made", which was true, so most off runs score as consistent, including the C runs that booked twice. The exceptions are C off run 3 ("The booking was not made." after a commit) and 4 of the 6 stop-test C runs.</p>
+
+<figure>
+<img src="../../assets/figures/before-after.webp" width="1600" height="900" loading="lazy" alt="Dot chart. Booked after the stop: A, C, G2 and F each 3 of 3 with the guard off and 0 of 3 with it on. First reply matched the booking state, no status note against full guard: A 0 of 3 against 3 of 3, C 3 of 3 against 3 of 3, G2 0 of 3 against 3 of 3, F not run. Double booking in C: 2 of 3 off, 0 of 3 on.">
+<figcaption>Each dot is one run. From <code>results/figures/before-after.png</code>, drawn by <code>make_figure.py</code>.</figcaption>
+</figure>
+
+<h3>Which behaviors mattered</h3>
+<ul>
+<li><strong>Hold</strong> prevented all 12 unwanted commits, in three ways. In A and C the stop transcript arrived 4.47 to 4.51 s after the call, 0.47 to 0.51 s after <code>prepare</code> finished and about 1.0 s before the grace window ran out, so the grace window alone would have held the commit. In G2 the stop transcript arrived 0.67 to 0.68 s after the grace window had ended; only the hold on the open utterance kept the commit back. In F the stop was spoken before the call existed: the server transcribed request and stop as one turn and sent <code>book_slot</code> 1 to 366 ms after that transcript, and the check on the triggering utterance cancelled the job during <code>prepare</code>.</li>
+<li><strong>Dedupe</strong> fired once, in C run 2: the model re-issued <code>book_slot</code> with a new id in the same millisecond as the stop transcript, as <code>tomorrow 3pm</code> where the original call had <code>tomorrow at 3pm</code>, and got the existing job's <code>cancelled</code> status. With the guard off, 2 of 3 C runs booked twice; the re-issue came 18 and 279 ms after the stop transcript.</li>
+<li><strong>Abandon</strong> marked the call abandoned at the stop's onset in every C run where it was on, and skipped the response to the dead id. Each call the model re-issued got the existing job's status on its live id, and each of those replies was right.</li>
+<li><strong>The decision comes late.</strong> About 3.5 s after the start of the spoken stop: the 2.2 s utterance, then the input transcript, which arrived in one chunk 1.26 to 1.31 s after the last chunk of the clip. <code>ACTIVITY_START</code> for the stop came 147 to 248 ms after its first chunk. <code>interim_input_transcription</code> never arrived.</li>
+<li><code>toolCallCancellation</code>: 0 of 36 sessions, 0 of 77 counting the stop test.</li>
+</ul>
+
+<h3>Ablations</h3>
+<p>Guard on with one behavior switched off, N=3 each. Compare with the off and on rows above.</p>
+<div class="table-wrap">
+<table class="wide">
+<thead><tr><th>Config</th><th>Scenario</th><th>Unwanted commit</th><th>Double booking</th><th>Statement consistent (last claim)</th><th>First claim consistent</th></tr></thead>
+<tbody>
+<tr><td>no status note</td><td>A</td><td>0/3</td><td>0/3</td><td>3/3</td><td><strong>0/3</strong></td></tr>
+<tr><td>no status note</td><td>C</td><td>0/3</td><td>0/3</td><td>3/3</td><td>3/3</td></tr>
+<tr><td>no status note</td><td>G2</td><td>0/3</td><td>0/3</td><td>3/3</td><td><strong>0/3</strong></td></tr>
+<tr><td>no hold, no abandon</td><td>C</td><td><strong>3/3</strong></td><td>0/3</td><td>3/3</td><td>3/3</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><strong>No status note.</strong> The job was always cancelled before the commit; only the note was missing. In A and G2 (NON_BLOCKING) the <code>cancelled</code> <code>FunctionResponse</code> went out 1 to 5 ms after the decision, yet all 6 first replies were false, for example "The booking was already made and cannot be canceled." A second turn corrected each one 2.4 to 4.8 s later. In C the model re-issued <code>book_slot</code> in 3 of 3 runs, dedupe answered each new id with <code>cancelled</code>, and all three first replies were right. So in BLOCKING mode the response on the re-issued id carried the status; in NON_BLOCKING mode the note is what made the first reply right.</li>
+<li><strong>No hold, no abandon.</strong> Abandon had to go too, because in BLOCKING mode it holds the commit on its own. The commit went through in 3 of 3. The note ("System note: booking BK-1001 for tomorrow 3pm is confirmed. The user asked to stop after it was committed. Tell them it is confirmed and offer to cancel it.") went out 1 ms after the stop transcript, and all 3 replies matched the committed state and offered to cancel. The 12 guard-off sessions offered to cancel 0 times, the 15 stop-test sessions twice. In run 3 the model re-issued <code>book_slot</code> 1.32 s after the stop transcript with different arguments (<code>tomorrow at 3 PM</code> and <code>tomorrow 3pm</code>); dedupe answered it with <code>booked</code> and nothing was booked twice.</li>
+</ul>
+
+<h3>The note can cut a reply in half</h3>
+<p>A note sent with <code>turn_complete=True</code> interrupts a reply already in progress. In 8 of the 12 full-guard runs, <code>interrupted</code> arrived 12 to 78 ms after the note. In 3 runs the model had already emitted text. In C run 3 the reply was split "I have not" / "booked that slot for you." A client that drops its queued audio on <code>interrupted</code> plays only the second half, which says the opposite of the truth. Two options were not tested: send the note only while the model is idle, or carry the status in a <code>FunctionResponse</code> with a scheduling mode.</p>
+
+<h3>The clip</h3>
+<figure>
+<video controls preload="none" playsinline width="1280" height="720" poster="../../assets/posters/before-after.webp">
+<source src="../../assets/clips/before-after.mp4" type="video/mp4">
+<a href="../../assets/clips/before-after.mp4">Download the clip (MP4)</a>
+</video>
+<figcaption>MP4, 33.7 s, 802 KB. First half: the stop test's BLOCKING run without the guard (the clip on the <a href="../gemini-live-stop-test/">stop test page</a>). Second half, real time with the model's audio: one extra C session with the full guard, recorded on 2026-10-02 for the clip and not counted in the tables (rule: cancelled before commit, note sent, a clear correct reply the note did not cut; up to 3 tries allowed; run 1 met it). The guard cancels the job at 8720 ms on the stop transcript, 0.50 s after <code>prepare</code> finished. The model re-issues <code>book_slot</code> at 8721 ms and dedupe answers <code>cancelled</code> at 8724 ms. The note goes out at 8726 ms, and from 10063 ms the model says "The booking was cancelled and nothing is scheduled." No <code>toolCallCancellation</code>. From <code>results/clip/before-after.mp4</code>, drawn by <code>make_clip.py</code>.</figcaption>
+</figure>
+
+<h2 id="caveats">Caveats</h2>
+<ul>
+<li>Fake service: <code>prepare</code> is an <code>asyncio.sleep</code>, <code>commit</code> is instant, <code>cancel</code> always succeeds. A real backend needs its own reservation, expiry and idempotency. The grace window adds 1.5 s to every commit.</li>
+<li>Synthetic speech: one voice, one wording per utterance, digital silence, no noise, no echo of the model's own audio. With real microphones <code>ACTIVITY_START</code> can fire on noise or on the model's own audio; the guard then holds until the transcript and cancels on timeout.</li>
+<li>Keyword intent check: "wait, make it 4pm" would cancel the booking.</li>
+<li>The guard treats an <code>interrupted</code> within 1 s of its own note as caused by the note. A real barge-in in that second is caught only by its <code>ACTIVITY_START</code>.</li>
+<li>One endpoint and one model: Gemini API with an API key, not Vertex AI, no session resumption.</li>
+<li>N=3 per scenario and mode, on one morning. Live ablations cover only the status note (A, C, G2) and hold plus abandon (C).</li>
+<li>The consistency check reads the transcript, not the audio, and its rules are tuned on 51 statements from this one prompt. What a listener hears was not measured.</li>
+<li>The analysis code changed during the run (claim rules, the cut-reply column); the guard's runtime code did not. <code>aggregate.py</code> recomputes every column from the logged events with the final rules.</li>
+<li>A reference pattern, not a library: no package, one model, one prompt, one fake service.</li>
+</ul>
+
+<h2 id="source">Source and reproduce</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Commit</th><th>Date</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/20330de703be426725fe7457702f319581a15f89"><code>20330de</code></a></td><td>2026-10-01</td><td>The guard, the harness, the 36 sessions and <code>results/summary.md</code></td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/844258b6ff6424745bec0b34052398f3c0c558b7"><code>844258b</code></a></td><td>2026-10-01</td><td>Before/after figure and its script</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/229d9440bc27b4a82fc6c7b839ee150ba10a9bb7"><code>229d944</code></a></td><td>2026-10-02</td><td>Audio capture, the one recorded session for the clip (not counted), the clip</td></tr>
+</tbody>
+</table>
+</div>
+<p>Per-run tables, metric definitions and the rescored stop-test sessions: <a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/blob/20330de703be426725fe7457702f319581a15f89/results/summary.md"><code>results/summary.md</code></a>. Every event and guard decision is in <code>results/&lt;scenario&gt;_&lt;mode&gt;.jsonl</code>.</p>
+<pre><code>cp .env.example .env    # then set GEMINI_API_KEY in .env
+uv sync
+./run_guard.sh          # A, C, G2, F with the guard on, then off, N=3: 24 sessions</code></pre>
+<p>Offline, no key and no network: <code>uv run python -m unittest -v</code> (18 tests that replay recorded timelines). Ablations: <code>./run_guard.sh A_noinject C_noinject G2_noinject C_nohold_noabandon</code>. Rebuild the summary: <code>uv run aggregate.py</code>.</p>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What "stop" does to an in-flight tool call on Gemini 3.8 Live · Frontier</title>
+<meta name="description" content="41 Live API sessions on gemini-3.8-live, text and speech: no toolCallCancellation for a pending tool call, and a double booking in BLOCKING mode.">
+<meta property="og:title" content="What &quot;stop&quot; does to an in-flight tool call on Gemini 3.8 Live">
+<meta property="og:description" content="41 sessions, text and speech: no toolCallCancellation, and a double booking in BLOCKING mode.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://frontieroncloud.com/tests/gemini-live-stop-test/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/posters/stop-test-C1.webp">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/icon-32.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="../../"><img src="../../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="../../#tests">Tests</a>
+      <a href="../../standard/">Standard</a>
+      <a href="../../discuss/">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<p class="crumbs"><a href="../../">Frontier</a> › <a href="../../#tests">Tests</a> › gemini-live-stop-test</p>
+<h1>What "stop" does to an in-flight tool call on Gemini 3.8 Live</h1>
+
+<dl class="facts">
+<dt>Model</dt><dd><code>gemini-3.8-live</code></dd>
+<dt>Endpoint</dt><dd>Gemini API (Google AI Studio, API key). Not Vertex AI.</dd>
+<dt>SDK</dt><dd><code>google-genai</code> 2.25.0, Python 3.13</dd>
+<dt>Runs</dt><dd>2026-09-29 (text from 08:27 CEST, speech from 09:47 CEST) and 2026-09-30 (from 22:03 CEST)</dd>
+<dt>Sessions</dt><dd>41: 21 text, 20 speech. N=3 per scenario, plus two smoke sessions.</dd>
+<dt>Repository</dt><dd><a href="https://github.com/frontier-on-cloud/gemini-live-stop-test">frontier-on-cloud/gemini-live-stop-test</a> (MIT), commits listed <a href="#source">below</a></dd>
+<dt>Report to Google</dt><dd><a href="https://github.com/google-gemini/gemini-live-api-examples/issues/59">google-gemini/gemini-live-api-examples#59</a>, opened 2026-10-02 with the one-file reproduction</dd>
+<dt>Reddit</dt><dd><a href="https://www.reddit.com/r/FrontierOnGCP/s/e0TTgM3iK6">Part 1, text</a> (2026-09-29) · <a href="https://www.reddit.com/r/FrontierOnGCP/s/nFSmXnDHri">Part 2, speech and the clip</a> (2026-09-30)</dd>
+</dl>
+
+<h2 id="question">Question</h2>
+<p>A voice assistant on the Live API starts booking a slot through a tool. One second later the user says "Actually, stop. Don't book it." The booking takes 4 s to commit. Does the API tell the app to cancel the pending call, and what does the model tell the user?</p>
+<p>The Live API reference describes <code>toolCallCancellation</code> as a notice that a previously issued tool call should be cancelled, and says it occurs "only in cases where the clients interrupt server turns". The <code>gemini-3.8-live</code> model page says NON_BLOCKING is now the default function calling mode.</p>
+
+<h2 id="setup">Setup</h2>
+<ul>
+<li>One tool, <code>book_slot(slot)</code>, backed by a fake in-process booking service that commits 4.0 s after the call (7.0 s in G2). The tool response goes out as soon as the job commits.</li>
+<li>The user says "Book me the 3pm slot tomorrow, please.", then "Actually, stop. Don't book it."</li>
+<li>Part 1: typed text, sent with <code>send_realtime_input(text=...)</code>. Part 2: synthetic speech (macOS <code>say</code>, voice Samantha, 16 kHz 16-bit mono PCM), streamed in 100 ms chunks in real time, with server voice activity detection at its defaults.</li>
+<li>Output: AUDIO with output transcription. The server rejected a TEXT-only session with close code 1007.</li>
+<li>Every server message is logged with a timestamp in ms since session start.</li>
+</ul>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Scenario</th><th>Tool behavior</th><th>When the stop is sent</th></tr></thead>
+<tbody>
+<tr><td>A, B</td><td>unset (model default, NON_BLOCKING). A and B differ only in whether the harness would act on a cancellation.</td><td>1.0 s after the tool call</td></tr>
+<tr><td>C</td><td>BLOCKING</td><td>1.0 s after the tool call</td></tr>
+<tr><td>D</td><td>unset</td><td>5.5 s after the tool call, after the commit</td></tr>
+<tr><td>E</td><td>unset, tool response with <code>scheduling: SILENT</code></td><td>1.0 s after the tool call</td></tr>
+<tr><td>F</td><td>unset</td><td>0.3 s after the request, before any tool call (speech: 0.3 s after the end of the request clip)</td></tr>
+<tr><td>G2</td><td>unset, 7.0 s service, a follow-up question 0.5 s after the call so the model speaks while the call is pending</td><td>1.0 s into that speech, call still pending (speech only)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="results">Results</h2>
+
+<h3>Part 1: text input, 2026-09-29</h3>
+<ul>
+<li><strong><code>toolCallCancellation</code>: 0 of 18 sessions</strong> (A, B, C, E, the D re-run and F). The first D pass, 3 sessions, ended early because of a bug in the harness stop condition. It is kept in the data, marked, and left out of this count. It had no cancellation either.</li>
+<li><strong>Default mode (A, B, E, 9 runs).</strong> The model's turn held only the <code>book_slot</code> call and no speech, so the stop interrupted nothing. 0.5 to 0.9 s after the stop the model said, in some form, that the booking was already made. At that moment the fake service was still about 2 s from committing, and no tool response had been sent. 9 of 9.</li>
+<li><strong>BLOCKING (C).</strong> <code>interrupted</code> arrived 16 to 18 ms after the stop, with no cancellation. 0.6 to 0.8 s later the model issued a second <code>book_slot</code> call with a new id and the same slot. Both bookings committed, and the model said the slot was already booked. 3 of 3.</li>
+<li><strong>Stop after the commit (D re-run).</strong> <code>interrupted</code> 15 to 16 ms after the stop, no cancellation. 0.5 to 0.7 s after the stop the model said the booking was already made, which was true this time. It is the same kind of sentence as in A, B and E, where it was not true.</li>
+<li><strong>Stop before the call (F).</strong> No <code>interrupted</code>, no cancellation. <code>book_slot</code> still arrived in 2 of 3 runs, 1047 and 1115 ms after the stop; the booking committed and the model said it was already made. In run 1 no call came, and the model said "I haven't made that booking for you."</li>
+<li><strong>E (<code>scheduling: SILENT</code>).</strong> The model did not speak after the tool response.</li>
+</ul>
+
+<figure>
+<img src="../../assets/figures/stop-timeline-A1-C1.webp" width="1600" height="900" loading="lazy" alt="Timeline of run 1 of the default scenario and run 1 of the BLOCKING scenario, text input. Default: tool call at 0.808 s, stop at 1.809 s, the model says the booking was already made at 2.639 s, the booking commits at 4.811 s. BLOCKING: tool call at 0.891 s, stop at 1.892 s, interrupted at 1.910 s, second tool call at 2.714 s, bookings commit at 4.893 s and 6.716 s.">
+<figcaption>Run 1 of A (default) and run 1 of C (BLOCKING), text input, on one time axis. From <code>results/figures/stop-timeline-A1-C1.png</code>, drawn by <code>make_figure.py</code>.</figcaption>
+</figure>
+
+<h3>Part 2: speech input, 2026-09-29 and 2026-09-30</h3>
+<p>Counts are runs out of sessions. Offsets are ms after the stop: for text, after the stop text was sent; for speech, after the first chunk of the stop clip, so they include the server's speech detection delay. Text A is A plus B.</p>
+<div class="table-wrap">
+<table class="wide">
+<thead><tr><th>Scenario</th><th>Input</th><th>Cancellation</th><th><code>interrupted</code> after the stop</th><th>Double booking</th><th>Tool call after an early stop</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>text</td><td class="n">0/6</td><td>0/6</td><td class="n">0/6</td><td>n/a</td></tr>
+<tr><td>A</td><td>speech</td><td class="n">0/3</td><td>0/3</td><td class="n">0/3</td><td>n/a</td></tr>
+<tr><td>C</td><td>text</td><td class="n">0/3</td><td>3/3, +16 to +18 ms</td><td class="n">3/3</td><td>n/a</td></tr>
+<tr><td>C</td><td>speech</td><td class="n">0/3</td><td>3/3, +149 to +152 ms</td><td class="n">1/3</td><td>n/a</td></tr>
+<tr><td>D</td><td>text</td><td class="n">0/3</td><td>3/3, +15 to +16 ms</td><td class="n">0/3</td><td>n/a</td></tr>
+<tr><td>D</td><td>speech</td><td class="n">0/3</td><td>3/3, +139 to +144 ms</td><td class="n">0/3</td><td>n/a</td></tr>
+<tr><td>F</td><td>text</td><td class="n">0/3</td><td>0/3</td><td class="n">0/3</td><td>2/3, +1047 and +1115 ms</td></tr>
+<tr><td>F</td><td>speech</td><td class="n">0/3</td><td>0/3</td><td class="n">0/3</td><td>3/3, +3465 to +3475 ms</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><code>voiceActivity</code> <code>ACTIVITY_START</code> for the stop arrived 139 to 154 ms after the first chunk of the stop clip (A, C, D). In C and D, <code>interrupted</code> arrived in the same millisecond or 1 ms later.</li>
+<li><strong>BLOCKING with speech (C).</strong> Run 2 booked twice. In runs 1 and 3 one booking committed and the tool response said <code>status: booked</code>, then the model said "I have not booked the slot. It has been canceled as requested." and "I've stopped the process, and the booking booking was not made."</li>
+<li><strong>Default with speech (A).</strong> The "already booked" reply started 1056 to 1130 ms after the commit. With speech and a 4 s service, the text-mode finding (the claim before the commit) was not reproduced.</li>
+<li><strong>Early stop with speech (F).</strong> The server transcribed the request and the stop as one turn and sent <code>book_slot</code> after it, 3 of 3.</li>
+<li><strong>Barge-in while the model speaks (G2, a smoke session plus N=3, 2026-09-30).</strong> After the follow-up question the model spoke while the call was pending, for example "I am booking the 3 PM slot for you now. Please bring your ID and any necessary paperwork to the appointment." The stop interrupted that speech: <code>interrupted</code> arrived in the same millisecond as <code>ACTIVITY_START</code>, 144 to 238 ms after the stop clip started. No <code>toolCallCancellation</code>, no second call, and the pending call was never cancelled. The booking committed 0.9 to 1.0 s after <code>interrupted</code>.</li>
+<li><strong>BLOCKING re-run with the model's audio saved (C, 2026-09-30).</strong> Run 2 booked twice again. In runs 1 and 3, 1256 and 1172 ms after the commit, the model said "The booking was not made, so nothing has been scheduled." and "The booking was not made as you requested."</li>
+</ul>
+<p>Across both days: 41 sessions (21 text, 20 speech), none with a <code>toolCallCancellation</code>.</p>
+
+<h3>The clip</h3>
+<figure>
+<video controls preload="none" playsinline width="1280" height="720" poster="../../assets/posters/stop-test-C1.webp">
+<source src="../../assets/clips/stop-test-C1.mp4" type="video/mp4">
+<a href="../../assets/clips/stop-test-C1.mp4">Download the clip (MP4)</a>
+</video>
+<figcaption>Run 1 of the BLOCKING re-run with speech, real time, with the model's own audio. MP4, 15 s, 373 KB. The stop clip starts at 5183 ms. <code>interrupted</code> arrives at 5330 ms (+147 ms). The fake service commits BK-1001 at 8181 ms and the tool response <code>status: booked</code> goes out at 8186 ms. From 9437 ms the model says "The booking was not made, so nothing has been scheduled." No <code>toolCallCancellation</code>. From <code>results/clip/stop-test-C1.mp4</code>, drawn by <code>make_clip.py</code>.</figcaption>
+</figure>
+
+<h3>One-file reproduction, 2026-10-02</h3>
+<p><code>repro_blocking_reissue.py</code> (119 lines, <code>google-genai</code> and <code>python-dotenv</code> only) reproduces scenario C with typed text. In 3 BLOCKING runs, <code>interrupted</code> arrived 14, 21 and 14 ms after the stop; a second <code>toolCall</code> with a new id came 713 and 469 ms after the stop in runs 1 and 2; no run had a <code>toolCallCancellation</code>. In run 1 the re-issued call had the slot <code>tomorrow at 3pm</code> where the first had <code>tomorrow 3pm</code>. Raw output is in <code>results/repro/</code>. This is the reproduction in the report to Google.</p>
+
+<h2 id="meaning">What it means for an app</h2>
+<p>On this model the Live API does not hand the app a cancellation for a pending tool call. The app holds the call id and runs the job, so "stop" has to be handled on the client: hold the side effect for a short grace window, deduplicate repeated calls for the same booking, and take the booking status from the backend, not from the model's sentence. The follow-up test, <a href="../gemini-live-commit-guard/">a client-side commit guard</a>, measures that.</p>
+
+<h2 id="caveats">Caveats</h2>
+<ul>
+<li>The booking service is a fake in-process <code>asyncio</code> job. Cancelling it is <code>asyncio.Task.cancel()</code>.</li>
+<li>Part 1 used typed text. Part 2 used synthetic speech: one macOS voice, one wording per utterance, no background noise, no room acoustics, no echo of the model's own audio.</li>
+<li>Gemini API with an API key only. Not Vertex AI, not other models, not session resumption.</li>
+<li>N=3 per scenario, plus one smoke session each for G1 and G2, over two days. It shows what can happen, not how often.</li>
+<li>The system prompt asked the model to say plainly whether the booking was made. A prompt that forbids status claims without a tool result may change the wording. It does not produce the missing cancellation.</li>
+<li>G needed a follow-up question to make the model speak while the call was pending. With the G1 wording, one combined request, it did not.</li>
+<li>"What the model said after the stop" counts everything received after the stop was sent, including output generated just before it that arrived late.</li>
+</ul>
+
+<h2 id="source">Source and reproduce</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Commit</th><th>Date</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-stop-test/tree/fc6ab7aff4fe34958bfc1b53e50c1ccae7f3b3b9"><code>fc6ab7a</code></a></td><td>2026-09-29</td><td>Text runs (A to F, the D re-run) and the 12 speech sessions</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-stop-test/tree/687cc7201cb1605ce676d1f879bbe0dcbf1d1f25"><code>687cc72</code></a></td><td>2026-09-30</td><td>Scenario G and the BLOCKING re-run with saved model audio</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-stop-test/tree/e8b7c99957fcbcf35556022e06b21b9628a86a60"><code>e8b7c99</code></a></td><td>2026-09-30</td><td>Clip script and clip</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-stop-test/tree/0d8ab9b33dda69694793d788dc2180e39b7acae3"><code>0d8ab9b</code></a></td><td>2026-10-02</td><td>One-file reproduction and its output</td></tr>
+</tbody>
+</table>
+</div>
+<p>The numbers above come from <a href="https://github.com/frontier-on-cloud/gemini-live-stop-test/blob/0d8ab9b33dda69694793d788dc2180e39b7acae3/results/summary.md"><code>results/summary.md</code></a> and the README findings, built from the JSONL timelines committed next to them.</p>
+<pre><code>cp .env.example .env    # then set GEMINI_API_KEY in .env
+uv sync
+./run_all.sh            # text, scenarios A to F, N=3</code></pre>
+<p>Speech: <code>./run_audio.sh</code>. Scenario G2 and the BLOCKING re-run: <code>./run_g.sh</code>. One-file reproduction: <code>uv run repro_blocking_reissue.py</code>. The key is read only from <code>GEMINI_API_KEY</code> and never logged.</p>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>

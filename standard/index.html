@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standard · Frontier</title>
+<meta name="description" content="The reproducibility rules every Frontier test follows: a public repository at a named commit, raw data next to the summary, and a Reproduce section.">
+<meta property="og:title" content="The Frontier standard">
+<meta property="og:description" content="A public repository at a named commit, raw data next to the summary, and a Reproduce section.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://frontieroncloud.com/standard/">
+<meta property="og:image" content="https://frontieroncloud.com/assets/icon-256.png">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/icon-32.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="../"><img src="../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <nav aria-label="Site">
+      <a href="../#tests">Tests</a>
+      <a href="./" aria-current="page">Standard</a>
+      <a href="../discuss/">Discuss</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<h1>The standard</h1>
+<p>A test is published here only when someone else can rerun it and check every number without trusting the person who measured it. These are the rules.</p>
+
+<h2 id="repository">What each repository contains</h2>
+<p>Each test has a public repository in <a href="https://github.com/frontier-on-cloud">frontier-on-cloud</a>. At the commit named on the test page, it contains:</p>
+<ol>
+<li>A README that states what is measured, the exact model id, the SDK name and version, the endpoint (for example the Gemini API or Vertex AI), the region when it matters, and the run date. Its Reproduce section takes at most three commands: <code>cp .env.example .env</code>, one install command, one run script. When a setup cannot fit in three, such as a container that drops packets or a dependency patched between two runs, the README lists every step and the test page says so.</li>
+<li>A pinned environment: <code>pyproject.toml</code> with <code>uv.lock</code> and <code>.python-version</code>, or the equivalent for another language, such as <code>package-lock.json</code>.</li>
+<li>Scripts that regenerate everything from scratch: raw logs, summary tables, figures and clips. No number comes from a manual step.</li>
+<li>The raw data, committed next to the summary: JSONL timelines, audio, sidecar files. A reader can check a claim without rerunning anything.</li>
+<li>A section on what the test does not establish: fake components, synthetic inputs, N, the endpoint, anything else that limits the claim.</li>
+<li>No secret anywhere. <code>.env</code> is ignored, <code>.env.example</code> is present, and outputs are scanned before a push.</li>
+</ol>
+
+<h2 id="numbers">How numbers are reported</h2>
+<ul>
+<li>Each test page names the repository, the commit the numbers come from, and the run dates.</li>
+<li>Numbers are copied from the summary files as they are, not rounded again. Counts are runs out of sessions, such as 3/3. A small N shows what can happen, not how often.</li>
+<li>Runs left out of a count stay in the data, marked, and the page says why.</li>
+<li>Clips show real runs. When a session was recorded only for a clip, it is labeled in the repository and left out of the counted tables. Compressed time is marked on screen.</li>
+<li>If a harness changes after publication, the old numbers stay tied to the old commit. A re-run gets a dated note, never a silent edit.</li>
+</ul>
+
+<h2 id="disagree">When a number looks wrong</h2>
+<p>Open an issue in the test's repository with the file and the line, or post a rerun with your commit, date, endpoint and N. See <a href="../discuss/">Discuss</a>.</p>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Code and data: <a href="https://github.com/frontier-on-cloud">github.com/frontier-on-cloud</a>. Discussion: <a href="https://www.reddit.com/r/FrontierOnGCP/">r/FrontierOnGCP</a>.</p>
+    <p>Static pages. No cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+</body>
+</html>
