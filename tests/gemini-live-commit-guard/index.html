@@ -102,7 +102,7 @@
 <ul>
 <li><strong>Hold</strong> prevented all 12 unwanted commits, in three ways. In A and C the stop transcript arrived 4.47 to 4.51 s after the call, 0.47 to 0.51 s after <code>prepare</code> finished and about 1.0 s before the grace window ran out, so the grace window alone would have held the commit. In G2 the stop transcript arrived 0.67 to 0.68 s after the grace window had ended; only the hold on the open utterance kept the commit back. In F the stop was spoken before the call existed: the server transcribed request and stop as one turn and sent <code>book_slot</code> 1 to 366 ms after that transcript, and the check on the triggering utterance cancelled the job during <code>prepare</code>.</li>
 <li><strong>Dedupe</strong> fired once, in C run 2: the model re-issued <code>book_slot</code> with a new id in the same millisecond as the stop transcript, as <code>tomorrow 3pm</code> where the original call had <code>tomorrow at 3pm</code>, and got the existing job's <code>cancelled</code> status. With the guard off, 2 of 3 C runs booked twice; the re-issue came 18 and 279 ms after the stop transcript.</li>
-<li><strong>Abandon</strong> marked the call abandoned at the stop's onset in every C run where it was on, and skipped the response to the dead id. Each call the model re-issued got the existing job's status on its live id, and each of those replies was right.</li>
+<li><strong>Abandon</strong> marked the call abandoned at the stop's onset in every C run where it was on (6 of 6: 3 main runs and 3 no-inject ablation runs), and skipped the response to the dead id. The model re-issued <code>book_slot</code> in 4 of those 6. Each call the model re-issued got the existing job's status on its live id, and each of those replies was right.</li>
 <li><strong>The decision comes late.</strong> About 3.5 s after the start of the spoken stop: the 2.2 s utterance, then the input transcript, which arrived in one chunk 1.26 to 1.31 s after the last chunk of the clip. <code>ACTIVITY_START</code> for the stop came 147 to 248 ms after its first chunk. <code>interim_input_transcription</code> never arrived.</li>
 <li><code>toolCallCancellation</code>: 0 of 36 sessions, 0 of 77 counting the stop test.</li>
 </ul>
@@ -158,6 +158,7 @@
 <tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/20330de703be426725fe7457702f319581a15f89"><code>20330de</code></a></td><td>2026-10-01</td><td>The guard, the harness, the 36 sessions and <code>results/summary.md</code></td></tr>
 <tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/844258b6ff6424745bec0b34052398f3c0c558b7"><code>844258b</code></a></td><td>2026-10-01</td><td>Before/after figure and its script</td></tr>
 <tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/229d9440bc27b4a82fc6c7b839ee150ba10a9bb7"><code>229d944</code></a></td><td>2026-10-02</td><td>Audio capture, the one recorded session for the clip (not counted), the clip</td></tr>
+<tr><td><a href="https://github.com/frontier-on-cloud/gemini-live-commit-guard/tree/3dc7491c48981c2a52438279c0b3f32675c06f8e"><code>3dc7491</code></a></td><td>2026-10-03</td><td>README correction: the abandon count is 6 of 6 runs, re-issue in 4 of 6 (it read 9 of 9 and 4 of 9)</td></tr>
 </tbody>
 </table>
 </div>
