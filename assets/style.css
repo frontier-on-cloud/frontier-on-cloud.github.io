@@ -1,32 +1,20 @@
 /* Frontier. Plain, dense, readable. No webfonts, no scripts. */
 
 :root {
-  --bg: #ffffff;
-  --fg: #161a1f;
-  --muted: #4f5862;
-  --line: #d3dae0;
-  --surface: #f2f5f7;
-  --link: #066f89;      /* brand key #0891b2 darkened, same hue, for text on white */
-  --accent: #0891b2;    /* brand key: bars, focus rings, non-text marks */
+  /* One light theme, like the old forums. Dark text on a warm off-white, below
+     the glare of pure black on pure white (13.9:1 instead of 17.5:1), and no
+     light-on-black dark mode: it caused halation for readers. */
+  --bg: #faf9f6;
+  --fg: #24292f;        /* 13.92:1 on bg, 12.83:1 on surface */
+  --muted: #57606a;     /* 6.07:1 on bg, 5.59:1 on surface */
+  --line: #d8dee4;
+  --surface: #eef0f2;
+  --link: #066f89;      /* brand key #0891b2 darkened, same hue: 5.48:1 on bg, 5.05:1 on surface */
+  --accent: #0891b2;    /* brand key: bars, focus rings, non-text marks (3.50:1 on bg) */
   --band: #080b10;      /* brand base: header band, same as the icon background */
   --band-fg: #e1e6ea;
   --band-link: #cbd1d6; /* brand curve gray */
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #080b10;      /* brand base */
-    --fg: #e1e6ea;
-    --muted: #9aa5af;
-    --line: #26323c;
-    --surface: #173039; /* brand pinned color: table heads and code, never behind links */
-    --link: #0891b2;    /* brand key */
-    --accent: #0891b2;
-    --band: #080b10;
-    --band-fg: #e1e6ea;
-    --band-link: #cbd1d6;
-  }
+  color-scheme: light;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -39,7 +27,7 @@ body {
   color: var(--fg);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .wrap { max-width: 50rem; margin: 0 auto; padding: 0 1rem; }
