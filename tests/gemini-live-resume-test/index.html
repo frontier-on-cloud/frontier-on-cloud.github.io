@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>A pending tool call across a lost connection and session resumption · Frontier</title>
+<title>A pending tool call across a lost connection and session resumption · Frontier on Cloud</title>
 <meta name="description" content="43 Live API sessions on gemini-3.8-live: after a silent connection loss every resume was refused with 1011 while the server held the old connection; a client-side fallback answered correctly in 9 of 9 runs.">
 <meta property="og:title" content="A pending tool call across a lost connection and session resumption">
 <meta property="og:description" content="43 sessions: after a silent loss, 450 of 450 resume attempts refused over 15 minutes; a client-side fallback answered correctly in 9 of 9 runs.">
@@ -14,21 +14,24 @@
 <link rel="icon" type="image/png" sizes="32x32" href="../../assets/icon-32.png">
 <link rel="apple-touch-icon" href="../../apple-touch-icon.png">
 <link rel="stylesheet" href="../../assets/style.css">
+<script>try{if(localStorage.getItem("theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+<script src="../../assets/theme.js" defer></script>
 </head>
 <body>
 <header class="top">
   <div class="wrap bar">
-    <a class="brand" href="../../"><img src="../../assets/icon-64.png" width="28" height="28" alt="">Frontier</a>
+    <a class="brand" href="../../"><img src="../../assets/icon-64.png" width="28" height="28" alt="">Frontier on Cloud</a>
     <nav aria-label="Site">
       <a href="../../#tests">Tests</a>
       <a href="../../standard/">Standard</a>
       <a href="../../discuss/">Discuss</a>
+      <button class="theme-toggle" type="button" aria-pressed="false" hidden>Dark</button>
     </nav>
   </div>
 </header>
 
 <main class="wrap">
-<p class="crumbs"><a href="../../">Frontier</a> › <a href="../../#tests">Tests</a> › gemini-live-resume-test</p>
+<p class="crumbs"><a href="../../">Frontier on Cloud</a> › <a href="../../#tests">Tests</a> › gemini-live-resume-test</p>
 <h1>A pending tool call across a lost connection and session resumption</h1>
 
 <dl class="facts">
