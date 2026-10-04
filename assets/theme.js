@@ -1,4 +1,4 @@
-// Light by default; the reader can switch to the soft dark theme. The choice stays in this browser.
+// Follows the reader's system setting until they pick a theme with the button; the choice stays in this browser.
 (function () {
   var root = document.documentElement;
   var button = document.querySelector('.theme-toggle');

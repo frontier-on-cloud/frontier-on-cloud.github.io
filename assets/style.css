@@ -1,10 +1,10 @@
 /* Frontier. Plain, dense, readable. No webfonts, no scripts. */
 
 :root {
-  /* Light by default, like the old forums: dark text on a warm off-white, below
-     the glare of pure black on pure white (13.9:1 instead of 17.5:1). A soft dark
-     theme is opt-in through the header button; its text stays near 10:1, because
-     near-white on near-black (15.7:1) caused halation for readers. */
+  /* Light theme: dark text on a warm off-white, below the glare of pure black on
+     pure white (13.9:1 instead of 17.5:1). The soft dark theme follows the
+     reader's system setting, and the header button overrides it; its text stays
+     near 10:1, because near-white on near-black (15.7:1) caused halation. */
   --bg: #faf9f6;
   --fg: #24292f;        /* 13.92:1 on bg, 12.83:1 on surface */
   --muted: #57606a;     /* 6.07:1 on bg, 5.59:1 on surface */
